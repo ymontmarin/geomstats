@@ -673,16 +673,31 @@ class LieGroup(Manifold, abc.ABC):
         result : array-like, shape=[..., *shape]
             Group exponential.
         """
-        identity = self.get_identity()
+        identity = self.broadcast_identity(tangent_vec)
 
         if base_point is None:
             base_point = identity
+
         base_point = self.regularize(base_point)
 
-        if gs.allclose(base_point, identity):
-            result = self.exp_from_identity(tangent_vec)
+        if tangent_vec.shape != self.shape:
+            where = gs.where(
+                gs.all(
+                    gs.reshape(
+                        gs.isclose(base_point, identity),
+                        (tangent_vec.shape[0], -1)
+                    ),
+                    axis=-1
+                )
+            )
+            result[where] = self.exp_from_identity(tangent_vec[where])
+            result[~where] = self.exp_not_from_identity(tangent_vec[~where])
         else:
-            result = self.exp_not_from_identity(tangent_vec, base_point)
+            if gs.allclose(base_point, identity):
+                result = self.exp_from_identity(tangent_vec)
+            else:
+                result = self.exp_not_from_identity(tangent_vec, base_point)
+
         return result
 
     def log_from_identity(self, point):
@@ -690,12 +705,12 @@ class LieGroup(Manifold, abc.ABC):
 
         Parameters
         ----------
-        point : array-like, shape=[..., {dim, [n, n]}]
+        point : array-like, shape=[..., *shape]
             Point.
 
         Returns
         -------
-        tangent_vec : array-like, shape=[..., {dim, [n, n]}]
+        tangent_vec : array-like, shape=[..., *shape]
             Group logarithm.
         """
         raise NotImplementedError(
@@ -707,68 +722,73 @@ class LieGroup(Manifold, abc.ABC):
 
         Parameters
         ----------
-        point : array-like, shape=[..., {dim, [n, n]}]
+        point : array-like, shape=[..., *shape]
             Point.
-        base_point : array-like, shape=[..., {dim, [n, n]}]
+        base_point : array-like, shape=[..., *shape]
             Base point.
 
         Returns
         -------
-        tangent_vec : array-like, shape=[..., {dim, [n, n]}]
+        tangent_vec : array-like, shape=[..., *shape]
             Group logarithm.
         """
-        if self.default_point_type == "vector":
-            tangent_translation = self.tangent_translation_map(
-                point=base_point, left_or_right="left"
-            )
-            point_near_id = self.compose(self.inverse(base_point), point)
-            log_from_id = self.log_from_identity(point=point_near_id)
-            log = tangent_translation(log_from_id)
-            return log
-
-        lie_point = self.compose(self.inverse(base_point), point)
-        return self.compose(base_point, self.log_from_identity(lie_point))
+        tangent_translation = self.tangent_translation_map(
+            point=base_point, left_or_right="left"
+        )
+        point_near_id = self.compose(self.inverse(base_point), point)
+        log_from_id = self.log_from_identity(point=point_near_id)
+        log = tangent_translation(log_from_id)
+        return log
 
     def log(self, point, base_point=None):
         """Compute the group logarithm of `point` relative to `base_point`.
 
         Parameters
         ----------
-        point : array-like, shape=[..., {dim, [n, n]}]
+        point : array-like, shape=[..., *shape]
             Point.
-        base_point : array-like, shape=[..., {dim, [n, n]}]
+        base_point : array-like, shape=[..., *shape]
             Base point.
             Optional, defaults to identity if None.
 
         Returns
         -------
-        tangent_vec : array-like, shape=[..., {dim, [n, n]}]
+        tangent_vec : array-like, shape=[..., *shape]
             Group logarithm.
         """
         # TODO (ninamiolane): Build a standalone decorator that *only*
         # deals with point_type None and base_point None
-        identity = self.get_identity(point_type=self.default_point_type)
+        identity = self.broadcast_identity(point)
         if base_point is None:
             base_point = identity
 
         point = self.regularize(point)
         base_point = self.regularize(base_point)
 
+        if tangent_vec.shape != self.shape:
+            where = gs.where(
+                gs.all(
+                    gs.reshape(
+                        gs.isclose(base_point, identity),
+                        (tangent_vec.shape[0], -1)
+                    ),
+                    axis=-1
+                )
+            )
+            result[where] = self.log_from_identity(tangent_vec[where])
+            result[~where] = self.log_not_from_identity(tangent_vec[~where])
+        else:
+            if gs.allclose(base_point, identity):
+                result = self.log_from_identity(tangent_vec)
+            else:
+                result = self.log_not_from_identity(tangent_vec, base_point)
+
         if gs.allclose(base_point, identity):
             result = self.log_from_identity(point)
         else:
             result = self.log_not_from_identity(point, base_point)
+
         return result
-
-    def add_metric(self, metric):
-        """Add a metric to the instance's list of metrics.
-
-        Parameters
-        ----------
-        metric : RiemannianMetric
-            Metric to add.
-        """
-        self.metrics.append(metric)
 
     def lie_bracket(self, tangent_vector_a, tangent_vector_b, base_point=None):
         """Compute the lie bracket of two tangent vectors.
