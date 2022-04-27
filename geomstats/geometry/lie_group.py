@@ -224,9 +224,9 @@ class MatrixLieGroup(LieGroup, abc.ABC):
 
         Parameters
         ----------
-        vector : array-like, shape=[..., {dim, [n, n]}]
+        vector : array-like, shape=[..., n, n]
             Vector to project. Its shape must match the shape of base_point.
-        base_point : array-like, shape=[..., {dim, [n, n]}], optional
+        base_point : array-like, shape=[..., n, n], optional
             Point of the group.
             Optional, default: identity.
 
