@@ -811,17 +811,19 @@ class LieGroup(Manifold, abc.ABC):
         bracket : array-like, shape=[..., *shape]
             Lie bracket.
         """
-        if base_point is None:
-            base_point = self.get_identity(point_type=self.default_point_type)
-        inverse_base_point = self.inverse(base_point)
+        tangent_translation_inv = self.tangent_translation_map(
+            point=base_point, left_or_right="left", inverse=True
+        )
+        tangent_translation = self.tangent_translation_map(
+            point=base_point, left_or_right="left", inverse=False
+        )
 
-        first_term = Matrices.mul(inverse_base_point, tangent_vector_b)
-        first_term = Matrices.mul(tangent_vector_a, first_term)
-
-        second_term = Matrices.mul(inverse_base_point, tangent_vector_a)
-        second_term = Matrices.mul(tangent_vector_b, second_term)
-
-        return first_term - second_term
+        return tangent_translation(
+            self.lie_algebra.bracket(
+                tangent_translation_inv(tangent_vector_a),
+                tangent_translation_inv(tangent_vector_b)
+            )
+        )
 
     def is_tangent(self, vector, base_point=None, atol=ATOL):
         """Check whether the vector is tangent at base_point.
