@@ -237,9 +237,13 @@ class MatrixLieGroup(LieGroup, abc.ABC):
         """
         if base_point is None:
             return self.lie_algebra.projection(vector)
-        tangent_vec_at_id = self.compose(self.inverse(base_point), vector)
+
+        tangent_vec_at_id = Matrices.mul(
+            self.inverse(base_point),
+            vector
+        )
         regularized = self.lie_algebra.projection(tangent_vec_at_id)
-        return self.compose(base_point, regularized)
+        return Matrices.mul(base_point, regularized)
 
     @classmethod
     def exp(cls, tangent_vec, base_point=None):
@@ -274,8 +278,8 @@ class MatrixLieGroup(LieGroup, abc.ABC):
         expm = gs.linalg.expm
         if base_point is None:
             return expm(tangent_vec)
-        lie_algebra_vec = cls.compose(cls.inverse(base_point), tangent_vec)
-        return cls.compose(base_point, cls.exp(lie_algebra_vec))
+        lie_algebra_vec = Matrices.mul(cls.inverse(base_point), tangent_vec)
+        return cls.compose(base_point, expm(lie_algebra_vec))
 
     @classmethod
     def log(cls, point, base_point=None):
@@ -311,7 +315,7 @@ class MatrixLieGroup(LieGroup, abc.ABC):
         if base_point is None:
             return logm(point)
         lie_algebra_vec = logm(cls.compose(cls.inverse(base_point), point))
-        return cls.compose(base_point, lie_algebra_vec)
+        return Matrices.mul(base_point, lie_algebra_vec)
 
 
 class LieGroup(Manifold, abc.ABC):
