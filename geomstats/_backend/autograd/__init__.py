@@ -66,6 +66,7 @@ from autograd.numpy import (
     mean,
     meshgrid,
     mod,
+    moveaxis,
     ones,
     ones_like,
     outer,
