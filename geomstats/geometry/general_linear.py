@@ -30,10 +30,14 @@ class GeneralLinear(MatrixLieGroup, OpenSet):
         kwargs.setdefault("metric", ambient_space.metric)
 
         super(GeneralLinear, self).__init__(
-            ambient_space=ambient_space, n=n, lie_algebra=SquareMatrices(n), **kwargs
+            ambient_space=ambient_space, n=n, **kwargs
         )
 
         self.positive_det = positive_det
+
+    def _create_lie_algebra(self):
+        """Return the lie algebra object of the matrix lie group"""
+        return SquareMatrices(self.n)
 
     def projection(self, point):
         r"""Project a matrix to the general linear group.
