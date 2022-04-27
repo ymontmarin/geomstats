@@ -441,7 +441,7 @@ class LieGroup(Manifold, abc.ABC):
             Inverted point.
         """
 
-    def jacobian_translation(self, point, left_or_right="left", intrinsic=False, inverse=False):
+    def jacobian_translation(self, point, left_or_right="left", inverse=False):
         """Compute the Jacobian of left/right translation by a point.
 
         Compute the Jacobian matrix of the left translation by the point.
@@ -457,12 +457,64 @@ class LieGroup(Manifold, abc.ABC):
 
         Returns
         -------
-        jacobian : array-like, shape=[..., dim, dim]
+        jacobian : array-like, shape=[..., *shape, *shape]
             Jacobian of the left/right translation by point.
         """
-        raise NotImplementedError(
-            "The jacobian of the Lie group translation is not implemented."
+        errors.check_parameter_accepted_values(
+            left_or_right, "left_or_right", ["left", "right"]
         )
+
+        if left_or_right == 'left':
+            action = lambda x: self.compose(point, x)
+        elif left_or_right == 'right':
+            action = lambda x: self.compose(x, point)
+
+        jacobian_fun = gs.autodiff.jacobian(action)
+        
+        identity = self.broadcast_identity(point)
+
+        jacobian_matrix = jacobian_fun(identity)
+
+        if point.shape != self.shape:
+            # we are batched, restore batch dim as first axis
+            jacobian_matrix = gs.moveaxis(
+                gs.diagonal(jacobian_matrix, axis1=0, axis2=len(self.shape) + 1),
+                -1, 0
+            )
+
+        if not inverse:
+            return jacobian_matrix
+
+        # We need to invere if required
+        if self.full_intrinsic:
+            return gs.linalg.inv(jacobian_matrix)
+
+        # In general case, we need to transform to have the right expression
+        lb_i = self.local_basis(identity)
+        lb_p = self.local_basis(point)
+
+        # J' = B_pJB_I^T
+        peudo_J = gs.einsum(
+            '...ij,...jk,...lk->...il',
+            gs.reshape(lb_p, (-1, self.dim, self.shape_dim)),
+            gs.reshape(jacobian_matrix, (-1, self.shape_dim, self.shape_dim)),
+            gs.reshape(lb_i, (-1, self.dim, self.shape_dim)),
+            optimize='optimal'
+        )
+
+        # J^-1^ext = B_I^TJ'^-1B_p
+        aux = gs.einsum(
+            '...ji,...jk,...kl->...il',
+            gs.reshape(lb_i, (-1, self.dim, self.shape_dim)),
+            gs.linalg.inv(peudo_J),
+            gs.reshape(lb_p, (-1, self.dim, self.shape_dim)),
+            optimize='optimal'
+        )
+        res = gs.reshape(aux, (-1,) + self.shape + self.shape)
+
+        if point.shape == self.shape:
+            return res[0]
+        return res
 
     def tangent_translation_map(self, point, left_or_right="left", inverse=False):
         r"""Compute the push-forward map by the left/right translation.
