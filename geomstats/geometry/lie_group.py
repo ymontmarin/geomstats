@@ -50,14 +50,14 @@ class MatrixLieGroup(LieGroup, abc.ABC):
 
         Parameters
         ----------
-        point_a : array-like, shape=[..., {dim, [n, n]}]
+        point_a : array-like, shape=[..., n, n]
             Left factor in the product.
-        point_b : array-like, shape=[..., {dim, [n, n]}]
+        point_b : array-like, shape=[..., n, n]
             Right factor in the product.
 
         Returns
         -------
-        composed : array-like, shape=[..., {dim, [n, n]}]
+        composed : array-like, shape=[..., n, n]
             Product of point_a and point_b along the first dimension.
         """
         return Matrices.mul(point_a, point_b)
@@ -68,12 +68,12 @@ class MatrixLieGroup(LieGroup, abc.ABC):
 
         Parameters
         ----------
-        point : array-like, shape=[..., {dim, [n, n]}]
+        point : array-like, shape=[..., n, n]
             Point to be inverted.
 
         Returns
         -------
-        inverse : array-like, shape=[..., {dim, [n, n]}]
+        inverse : array-like, shape=[..., n, n]
             Inverted point.
         """
         return gs.linalg.inv(point)
@@ -91,7 +91,7 @@ class MatrixLieGroup(LieGroup, abc.ABC):
 
         Parameters
         ----------
-        point : array-like, shape=[..., {dim, [n, n]]
+        point : array-like, shape=[..., n, n]
             Point.
         left_or_right : str, {'left', 'right'}
             Whether to calculate the differential of left or right
