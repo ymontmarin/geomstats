@@ -46,6 +46,7 @@ from tensorflow import range as arange
 from tensorflow import reduce_max as amax
 from tensorflow import reduce_mean as mean
 from tensorflow import reduce_min as amin
+from tensorflow.experimental.numpy import moveaxis
 from tensorflow import reduce_prod as prod
 from tensorflow import (
     reshape,
