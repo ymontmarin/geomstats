@@ -415,42 +415,40 @@ class LieGroup(Manifold, abc.ABC):
 
         Parameters
         ----------
-        point_a : array-like, shape=[..., {dim, [n, n]}]
+        point_a : array-like, shape=[..., *shape]
             Left factor in the product.
-        point_b : array-like, shape=[..., {dim, [n, n]}]
+        point_b : array-like, shape=[..., *shape]
             Right factor in the product.
 
         Returns
         -------
-        composed : array-like, shape=[..., {dim, [n, n]}]
+        composed : array-like, shape=[..., *shape]
             Product of point_a and point_b along the first dimension.
         """
-        raise NotImplementedError("The Lie group composition is not implemented.")
 
-    @classmethod
-    def inverse(cls, point):
+    @abc.abstractmethod
+    def inverse(self, point):
         """Compute the inverse law of the Lie group.
 
         Parameters
         ----------
-        point : array-like, shape=[..., {dim, [n, n]}]
+        point : array-like, shape=[..., *shape]
             Point to be inverted.
 
         Returns
         -------
-        inverse : array-like, shape=[..., {dim, [n, n]}]
+        inverse : array-like, shape=[..., *shape]
             Inverted point.
         """
-        raise NotImplementedError("The Lie group inverse is not implemented.")
 
-    def jacobian_translation(self, point, left_or_right="left"):
+    def jacobian_translation(self, point, left_or_right="left", intrinsic=False, inverse=False):
         """Compute the Jacobian of left/right translation by a point.
 
         Compute the Jacobian matrix of the left translation by the point.
 
         Parameters
         ----------
-        point : array-like, shape=[..., {dim, [n, n]]
+        point : array-like, shape=[..., *shape]
             Point.
         left_or_right : str, {'left', 'right'}
             Indicate whether to calculate the differential of left or right
