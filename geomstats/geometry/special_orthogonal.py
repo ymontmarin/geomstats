@@ -1736,6 +1736,6 @@ class SpecialOrthogonal(
             return _SpecialOrthogonal3Vectors(epsilon)
         if point_type == "vector":
             raise NotImplementedError(
-                "SO(n) is only implemented in vector representation" " when n = 3."
+                "SO(n) is only implemented in vector representation" " when n in {2, 3}."
             )
         return _SpecialOrthogonalMatrices(n, **kwargs)
