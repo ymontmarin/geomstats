@@ -55,8 +55,8 @@ class _SpecialOrthogonalMatrices(MatrixLieGroup, LevelSet):
         if self._metric is None:
             self._metric = self.bi_invariant_metric
 
-    @classmethod
-    def inverse(cls, point):
+    @staticmethod
+    def inverse(point):
         """Return the transpose matrix of point.
 
         Parameters
