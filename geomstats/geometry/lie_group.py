@@ -549,17 +549,71 @@ class LieGroup(Manifold, abc.ABC):
         errors.check_parameter_accepted_values(
             left_or_right, "left_or_right", ["left", "right"]
         )
-        if self.default_point_type == "matrix":
-            if inverse:
-                point = self.inverse(point)
-            if left_or_right == "left":
-                return lambda tangent_vec: Matrices.mul(point, tangent_vec)
-            return lambda tangent_vec: Matrices.mul(tangent_vec, point)
 
-        jacobian = self.jacobian_translation(point, left_or_right)
-        if inverse:
-            jacobian = gs.linalg.inv(jacobian)
-        return lambda tangent_vec: gs.einsum("...ij,...j->...i", jacobian, tangent_vec)
+        batched = point.shape != self.shape
+        jacobian = self.jacobian_translation(
+            point, left_or_right=left_or_right, inverse=inverse
+        )
+
+        def ttm(tangent_vec):
+            aux = gs.einsum("...ij,...j->...i",
+                gs.reshape(jacobian, (-1, self.shape_dim, self.shape_dim)),
+                gs.reshape(tangent_vec, (-1, self.shape_dim))
+            )
+            aux = gs.reshape(aux, (-1,) + shape)
+            if batched:
+                return aux[0]
+            return aux
+
+        return ttm
+
+    def local_basis_at_identity(self):
+        """Local basis of the tangent space of the manifold at the point
+        It correspond to patial_i vector field suppose the manifold is XXXX
+
+        Parameters
+        ----------
+        Returns
+        -------
+        local_basis : array-like, shape=[..., dim, *shape]
+            Bais.
+        """
+        return self.lie_algebra.basis
+
+    def local_basis(self, base_point=None, left_or_right="left"):
+        """Local basis of the tangent space of the manifold at the point
+        when moving the lie algebra through the right or left action        
+
+        Parameters
+        ----------
+        base_point : array-like, shape=[..., *shape]
+            Point.
+
+        Returns
+        -------
+        local_basis : array-like, shape=[..., dim, *shape]
+            Bais.
+        """
+        # This is the default implementation 'intrinsic', 'vector', shape==(dim,)
+        if base_point is None:
+            return self.local_basis_at_identity()
+
+        lb = gs.expand_dims(self.local_basis_at_identity(), 0)
+        bp = gs.reshape(base_point, (-1, 1) + shape)
+
+        broadcat_shape = (bp.shape[0], self.dim) + shape
+        broadcat_lb = gs.broadcast_to(lb, broadcat_shape)
+        broadcat_bp = gs.broadcast_to(bp, broadcat_shape)
+
+        new_basis = self.tangent_translation_map(
+            gs.reshape(broadcat_bp, (-1,) + self.shape),
+            left_or_right
+        )(gs.reshape(broadcat_lb, (-1,) + self.shape))
+        new_basis = gs.reshape(new_basis, broadcat_shape)
+
+        if base_point.shape == self.shape:
+            return new_basis[0]
+        return new_basis
 
     def exp_from_identity(self, tangent_vec):
         """Compute the group exponential of tangent vector from the identity.
