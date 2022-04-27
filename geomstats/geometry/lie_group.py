@@ -187,14 +187,14 @@ class MatrixLieGroup(LieGroup, abc.ABC):
 
         return first_term - second_term
 
-    def is_tangent(self, vector, base_point=None, atol=gs.atol):
+    def is_tangent(self, vector, base_point=None, atol=ATOL):
         """Check whether the vector is tangent at base_point.
 
         Parameters
         ----------
-        vector : array-like, shape=[..., dim_embedding]
+        vector : array-like, shape=[..., n, n]
             Vector.
-        base_point : array-like, shape=[..., dim_embedding]
+        base_point : array-like, shape=[..., n, n]
             Point in the Lie group.
             Optional. default: identity.
         atol : float
