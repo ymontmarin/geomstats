@@ -4,6 +4,7 @@ Lead author: Nina Miolane.
 """
 
 import abc
+from functools import partial
 
 import geomstats.backend as gs
 import geomstats.errors as errors
@@ -14,24 +15,31 @@ from geomstats.geometry.matrices import Matrices
 ATOL = 1e-6
 
 
-class MatrixLieGroup(Manifold, abc.ABC):
+class MatrixLieGroup(LieGroup, abc.ABC):
     """Class for matrix Lie groups."""
 
-    def __init__(self, dim, n, lie_algebra=None, **kwargs):
-        super(MatrixLieGroup, self).__init__(dim=dim, shape=(n, n), **kwargs)
-        self.lie_algebra = lie_algebra
+    def __init__(self, dim, n, **kwargs):
+        super(MatrixLieGroup, self).__init__(
+            dim=dim,
+            shape=(n, n),
+            **kwargs
+        )
         self.n = n
-        self.left_canonical_metric = InvariantMetric(
-            group=self, metric_mat_at_identity=gs.eye(self.dim), left_or_right="left"
-        )
 
-        self.right_canonical_metric = InvariantMetric(
-            group=self, metric_mat_at_identity=gs.eye(self.dim), left_or_right="right"
-        )
+    def get_identity(self, point):
+        """Get the identity of the group.
 
-    @property
-    def identity(self):
-        """Matrix identity."""
+        Parameters
+        ----------
+        point_type : str, {'matrix', 'vector'}
+            Point type.
+            Optional, default: None.
+
+        Returns
+        -------
+        identity : array-like, shape=[*shape]
+            Identity of the Lie group.
+        """
         return gs.eye(self.n)
 
     @staticmethod
@@ -54,8 +62,8 @@ class MatrixLieGroup(Manifold, abc.ABC):
         """
         return Matrices.mul(point_a, point_b)
 
-    @classmethod
-    def inverse(cls, point):
+    @staticmethod
+    def inverse(point):
         """Compute the inverse law of the Lie group.
 
         Parameters
