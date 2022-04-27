@@ -199,14 +199,13 @@ def integrate(function, initial_state, end_time=1.0, n_steps=10, step="euler"):
     check_parameter_accepted_values(step, "step", STEP_FUNCTIONS)
 
     dt = end_time / n_steps
-    states = [initial_state]
-    current_state = initial_state
+    states = np.zeros((n_steps + 1,) + initial_state.shape)
+    states[0] = initial_state
 
     step_function = globals()[STEP_FUNCTIONS[step]]
 
     for i in range(n_steps):
-        current_state = step_function(
-            state=current_state, force=function, time=i * dt, dt=dt
+        states[i + 1] = step_function(
+            state=states[i], force=function, time=i * dt, dt=dt
         )
-        states.append(current_state)
     return states
