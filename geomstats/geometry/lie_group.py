@@ -392,13 +392,22 @@ class LieGroup(Manifold, abc.ABC):
 
         Returns
         -------
-        identity : array-like, shape={[dim], [n, n]}
+        identity : array-like, shape=[*shape]
             Identity of the Lie group.
         """
         raise NotImplementedError("The Lie group identity is not implemented.")
 
     identity = property(get_identity)
 
+    def broadcast_identity(self, ref=None):
+        if ref is None or ref.shape == self.shape:
+            return self.get_identity()
+        return gs.broadcast_to(
+            gs.expand_dims(self.get_identity(), 0),
+            point.shape
+        )
+
+    @abc.abstractmethod
     def compose(self, point_a, point_b):
         """Perform function composition corresponding to the Lie group.
 
