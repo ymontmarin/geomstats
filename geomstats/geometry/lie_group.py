@@ -830,9 +830,9 @@ class LieGroup(Manifold, abc.ABC):
 
         Parameters
         ----------
-        vector : array-like, shape=[..., dim_embedding]
+        vector : array-like, shape=[..., *shape]
             Vector.
-        base_point : array-like, shape=[..., dim_embedding]
+        base_point : array-like, shape=[..., *shape]
             Point in the Lie group.
             Optional. default: identity.
         atol : float
@@ -848,8 +848,13 @@ class LieGroup(Manifold, abc.ABC):
         if base_point is None:
             tangent_vec_at_id = vector
         else:
-            tangent_vec_at_id = self.compose(self.inverse(base_point), vector)
+            tangent_translation = self.tangent_translation_map(
+                point=base_point, left_or_right="left", inverse=True
+            )
+            tangent_vec_at_id = tangent_translation(vector)
+
         is_tangent = self.lie_algebra.belongs(tangent_vec_at_id, atol)
+
         return is_tangent
 
     def to_tangent(self, vector, base_point=None):
@@ -857,19 +862,31 @@ class LieGroup(Manifold, abc.ABC):
 
         Parameters
         ----------
-        vector : array-like, shape=[..., {dim, [n, n]}]
+        vector : array-like, shape=[..., *shape]
             Vector to project. Its shape must match the shape of base_point.
-        base_point : array-like, shape=[..., {dim, [n, n]}], optional
+        base_point : array-like, shape=[..., *shape], optional
             Point of the group.
             Optional, default: identity.
 
         Returns
         -------
-        tangent_vec : array-like, shape=[..., n, n]
+        tangent_vec : array-like, shape=[..., *shape]
             Tangent vector at base point.
         """
+        tangent_translation = self.tangent_translation_map(
+            point=base_point, left_or_right="left", inverse=True
+        )
+
         if base_point is None:
             return self.lie_algebra.projection(vector)
-        tangent_vec_at_id = self.compose(self.inverse(base_point), vector)
+
+        tangent_translation_inv = self.tangent_translation_map(
+            point=base_point, left_or_right="left", inverse=True
+        )
+        tangent_translation = self.tangent_translation_map(
+            point=base_point, left_or_right="left", inverse=False
+        )
+
+        tangent_vec_at_id = tangent_translation_inv(vector)
         regularized = self.lie_algebra.projection(tangent_vec_at_id)
-        return self.compose(base_point, regularized)
+        return self.tangent_translation(regularized)
