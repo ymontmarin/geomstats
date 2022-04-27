@@ -352,14 +352,11 @@ class LieGroup(Manifold, abc.ABC):
         product at the identity.
     """
 
-    def __init__(
-        self, dim, shape, default_point_type="vector", lie_algebra=None, **kwargs
-    ):
-        super(LieGroup, self).__init__(
-            dim=dim, shape=shape, default_point_type=default_point_type, **kwargs
-        )
+    def __init__(self, dim, **kwargs):
+        super(LieGroup, self).__init__(dim=dim, **kwargs)
 
-        self.lie_algebra = lie_algebra
+        self._lie_algebra = None
+
         self.left_canonical_metric = InvariantMetric(
             group=self, metric_mat_at_identity=gs.eye(self.dim), left_or_right="left"
         )
@@ -369,9 +366,22 @@ class LieGroup(Manifold, abc.ABC):
         )
 
         self.metric = self.left_canonical_metric
-        self.metrics = []
+        self.add_metric(self.left_canonical_metric)
+        self.add_metric(self.right_canonical_metric)
 
-    def get_identity(self, point_type=None):
+    @abc.abstractmethod
+    def _create_lie_algebra(self):
+        """Return the lie algebra object of the matrix lie group"""
+
+    @property
+    def lie_algebra(self):
+        """Lie algebra of the Matrix Lie group."""
+        if self._lie_algebra is None:
+            self._lie_algebra = self._create_lie_algebra()
+        return self._lie_algebra
+
+    @abc.abstractmethod
+    def get_identity(self):
         """Get the identity of the group.
 
         Parameters
