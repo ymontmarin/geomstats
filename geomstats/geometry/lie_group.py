@@ -799,16 +799,16 @@ class LieGroup(Manifold, abc.ABC):
 
         Parameters
         ----------
-        tangent_vector_a : array-like, shape=[..., n, n]
+        tangent_vector_a : array-like, shape=[..., *shape]
             Tangent vector at base point.
-        tangent_vector_b : array-like, shape=[..., n, n]
+        tangent_vector_b : array-like, shape=[..., *shape]
             Tangent vector at base point.
-        base_point : array-like, shape=[..., n, n]
+        base_point : array-like, shape=[..., *shape]
             Base point.
 
         Returns
         -------
-        bracket : array-like, shape=[..., n, n]
+        bracket : array-like, shape=[..., *shape]
             Lie bracket.
         """
         if base_point is None:
