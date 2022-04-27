@@ -51,7 +51,7 @@ class RiemannianMetric(Connection, ABC):
 
         Parameters
         ----------
-        base_point : array-like, shape=[..., dim]
+        base_point : array-like, shape=[..., *shape]
             Base point.
             Optional, default: None.
 
@@ -76,7 +76,7 @@ class RiemannianMetric(Connection, ABC):
 
         Parameters
         ----------
-        base_point : array-like, shape=[..., dim]
+        base_point : array-like, shape=[..., *shape]
             Base point.
             Optional, default: None.
 
@@ -94,17 +94,39 @@ class RiemannianMetric(Connection, ABC):
 
         Parameters
         ----------
-        base_point : array-like, shape=[..., dim]
+        base_point : array-like, shape=[..., *shape]
             Base point.
             Optional, default: None.
 
         Returns
         -------
-        mat : array-like, shape=[..., dim, dim]
+        mat : array-like, shape=[..., dim, dim, dim]
             Derivative of inverse of inner-product matrix.
         """
-        metric_derivative = gs.autodiff.jacobian(self.metric_matrix)
-        return metric_derivative(base_point)
+        batched = base_point.shape != self.shape
+
+        if not hasattr(self, '_metric_derivative'):
+            # To compute the computational graph only once !
+            self._metric_derivative = gs.autodiff.jacobian(self.metric_matrix)
+
+        res = self._metric_derivative(base_point)
+
+        if batched:
+            # We are [...,*shape], we restore unique batch dim as 0 axis
+            res =  gs.moveaxis(gs.diagonal(res, axis1=0, axis2=3), -1, 0)
+
+        if not self.full_intrinsic:
+            lb = self.manifold.local_basis(base_point)
+            res = gs.einsum(
+                '...ijk,...lk->...ijl',
+                gs.reshape(res, (-1, self.dim, self.dim, self.shape_dim)),
+                gs.reshape(lb, (-1, self.dim, self.shape_dim)),
+            )
+            res = gs.reshape(res, (-1,) + self.shape)
+
+        if batched:
+            return res[0]
+        return res
 
     def christoffels(self, base_point):
         r"""Compute Christoffel symbols of the Levi-Civita connection.
@@ -119,7 +141,7 @@ class RiemannianMetric(Connection, ABC):
 
         Parameters
         ----------
-        base_point: array-like, shape=[..., dim]
+        base_point: array-like, shape=[..., *shape]
             Base point.
 
         Returns
@@ -147,11 +169,11 @@ class RiemannianMetric(Connection, ABC):
 
         Parameters
         ----------
-        tangent_vec_a: array-like, shape=[..., dim]
+        tangent_vec_a: array-like, shape=[..., *shape]
             Tangent vector at base point.
-        tangent_vec_b: array-like, shape=[..., dim]
+        tangent_vec_b: array-like, shape=[..., *shape]
             Tangent vector at base point.
-        base_point: array-like, shape=[..., dim]
+        base_point: array-like, shape=[..., *shape]
             Base point.
             Optional, default: None.
 
@@ -160,6 +182,15 @@ class RiemannianMetric(Connection, ABC):
         inner_product : array-like, shape=[...,]
             Inner-product.
         """
+        if not self.full_intrinsic:
+            lb = self.manifold.local_basis(base_point)
+            tangent_vec_a = self.manifold.local_basis_representation(
+                tangent_vec_a, base_point=base_point, _local_basis=lb
+            )
+            tangent_vec_b = self.manifold.local_basis_representation(
+                tangent_vec_b, base_point=base_point, _local_basis=lb
+            )
+
         inner_prod_mat = self.metric_matrix(base_point)
         aux = gs.einsum("...j,...jk->...k", tangent_vec_a, inner_prod_mat)
         inner_prod = gs.einsum("...k,...k->...", aux, tangent_vec_b)
@@ -172,11 +203,11 @@ class RiemannianMetric(Connection, ABC):
 
         Parameters
         ----------
-        cotangent_vec_a : array-like, shape=[..., dim]
+        cotangent_vec_a : array-like, shape=[..., *shape]
             Cotangent vector at `base_point`.
-        cotangent_vet_b : array-like, shape=[..., dim]
+        cotangent_vet_b : array-like, shape=[..., *shape]
             Cotangent vector at `base_point`.
-        base_point : array-like, shape=[..., dim]
+        base_point : array-like, shape=[..., *shape]
             Point on the manifold.
 
         Returns
@@ -184,10 +215,18 @@ class RiemannianMetric(Connection, ABC):
         inner_coproduct : float
             Inner coproduct between the two cotangent vectors.
         """
-        vector_2 = gs.einsum(
+        if not self.full_intrinsic:
+            lb = self.manifold.local_basis(base_point)
+            tangent_vec_a = self.manifold.local_basis_representation(
+                tangent_vec_a, base_point=base_point, local_basis=lb
+            )
+            tangent_vec_b = self.manifold.local_basis_representation(
+                tangent_vec_b, base_point=base_point, local_basis=lb
+            )
+        aux = gs.einsum(
             "...ij,...j->...i", self.cometric_matrix(base_point), cotangent_vec_b
         )
-        inner_coproduct = gs.einsum("...i,...i->...", cotangent_vec_a, vector_2)
+        inner_coproduct = gs.einsum("...i,...i->...", cotangent_vec_a, aux)
         return inner_coproduct
 
     def hamiltonian(self, state):
@@ -220,9 +259,9 @@ class RiemannianMetric(Connection, ABC):
 
         Parameters
         ----------
-        vector : array-like, shape=[..., dim]
+        vector : array-like, shape=[..., *shape]
             Vector.
-        base_point : array-like, shape=[..., dim]
+        base_point : array-like, shape=[..., *shape]
             Base point.
             Optional, default: None.
 
@@ -245,9 +284,9 @@ class RiemannianMetric(Connection, ABC):
 
         Parameters
         ----------
-        vector : array-like, shape=[..., dim]
+        vector : array-like, shape=[..., *shape]
             Vector.
-        base_point : array-like, shape=[..., dim]
+        base_point : array-like, shape=[..., *shape]
             Base point.
             Optional, default: None.
 
@@ -265,9 +304,9 @@ class RiemannianMetric(Connection, ABC):
 
         Parameters
         ----------
-        point_a : array-like, shape=[..., dim]
+        point_a : array-like, shape=[..., *shape]
             Point.
-        point_b : array-like, shape=[..., dim]
+        point_b : array-like, shape=[..., *shape]
             Point.
 
         Returns
@@ -288,9 +327,9 @@ class RiemannianMetric(Connection, ABC):
 
         Parameters
         ----------
-        point_a : array-like, shape=[..., dim]
+        point_a : array-like, shape=[..., *shape]
             Point.
-        point_b : array-like, shape=[..., dim]
+        point_b : array-like, shape=[..., *shape]
             Point.
 
         Returns
@@ -314,15 +353,15 @@ class RiemannianMetric(Connection, ABC):
 
         Parameters
         ----------
-        point_a : array-like, shape=[n_samples_a, dim]
+        point_a : array-like, shape=[n_samples_a, *shape]
             Set of points in the Poincare ball.
-        point_b : array-like, shape=[n_samples_b, dim]
+        point_b : array-like, shape=[n_samples_b, *shape]
             Second set of points in the Poincare ball.
 
         Returns
         -------
         dist : array-like,
-            shape=[n_samples_a, dim] or [n_samples_a, n_samples_b, dim]
+            shape=[n_samples_a] or [n_samples_a, n_samples_b]
             Geodesic distance between the two points.
         """
         ndim = len(self.shape)
@@ -355,7 +394,7 @@ class RiemannianMetric(Connection, ABC):
 
         Parameters
         ----------
-        points : array-like, shape=[n_samples, dim]
+        points : array-like, shape=[n_samples, *shape]
             Set of points in the manifold.
         n_jobs : int
             Number of jobs to run in parallel, using joblib. Note that a
@@ -399,7 +438,7 @@ class RiemannianMetric(Connection, ABC):
 
         Parameters
         ----------
-        points : array-like, shape=[..., dim]
+        points : array-like, shape=[..., *shape]
             Points.
 
         Returns
@@ -422,9 +461,9 @@ class RiemannianMetric(Connection, ABC):
 
         Parameters
         ----------
-        point : array-like, shape=[..., dim]
+        point : array-like, shape=[..., *shape]
             Point.
-        neighbors : array-like, shape=[..., dim]
+        neighbors : array-like, shape=[..., *shape]
             Neighbors.
 
         Returns
@@ -444,18 +483,31 @@ class RiemannianMetric(Connection, ABC):
 
         Parameters
         ----------
-        basis : array-like, shape=[dim, dim]
+        basis : array-like, shape=[..., dim, *shape]
             Matrix of a metric.
-        base_point
+        base_point : array-like, shape=[..., *shape]
 
         Returns
         -------
-        basis : array-like, shape=[dim, n, n]
+        basis : array-like, shape=[..., dim, *shape]
             Normal basis.
         """
-        norms = self.squared_norm(basis, base_point)
+        basis = gs.reshape(basis, (-1, self.dim) + self.shape)
+        broadcast_base_point = gs.broadcast_to(
+            gs.reshape(base_point, (-1, 1) + self.shape),
+            basis.shape
+        )
 
-        return gs.einsum("i, ikl->ikl", 1.0 / gs.sqrt(norms), basis)
+        norms = self.squared_norm(
+            gs.reshape(basis, (-1,) + self.shape),
+            gs.reshape(broadcast_base_point, (-1,) + self.shape)
+        )
+        norms = gs.reshape(norms, (-1, self.dim))
+
+        normed_basis = gs.einsum("ij, ijk->ijk", 1.0 / gs.sqrt(norms), basis)
+        if base_point.shape == self.shape:
+            return normed_basis[0]
+        return normed_basis
 
     def sectional_curvature(self, tangent_vec_a, tangent_vec_b, base_point=None):
         r"""Compute the sectional curvature.
@@ -467,11 +519,11 @@ class RiemannianMetric(Connection, ABC):
 
         Parameters
         ----------
-        tangent_vec_a : array-like, shape=[..., n, n]
+        tangent_vec_a : array-like, shape=[..., *shape]
             Tangent vector at `base_point`.
-        tangent_vec_b : array-like, shape=[..., n, n]
+        tangent_vec_b : array-like, shape=[..., *shape]
             Tangent vector at `base_point`.
-        base_point : array-like, shape=[..., n, n]
+        base_point : array-like, shape=[..., *shape]
             Point in the group. Optional, default is the identity
 
         Returns
