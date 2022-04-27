@@ -77,6 +77,7 @@ class _InvariantMetricMatrix(RiemannianMetric):
         symmetric_matrix : array-like, shape=[n, n]
             Symmetric matrix.
         """
+        # TODO: Add marker for diagonal
         if Matrices.is_diagonal(self.metric_mat_at_identity):
             metric_coeffs = gs.diagonal(self.metric_mat_at_identity)
             metric_mat = gs.abs(self.lie_algebra.matrix_representation(metric_coeffs))
@@ -100,6 +101,7 @@ class _InvariantMetricMatrix(RiemannianMetric):
         inner_prod : array-like, shape=[...]
             Inner-product of the two tangent vectors.
         """
+        # TODO: Switch for flat compute in non diagonal
         tan_b = tangent_vec_b
         metric_mat = self.metric_mat_at_identity
         if Matrices.is_diagonal(metric_mat) and self.lie_algebra is not None:
@@ -190,6 +192,8 @@ class _InvariantMetricMatrix(RiemannianMetric):
                        Geonger International Publishing, 2020.
                        https://doi.org/10.1007/978-3-030-46040-2.
         """
+        # TODO: Adapt in non diagonal case, use eigen decomposition and recomp
+        # TODO: Broadcast for basis batch
         basis = self.normal_basis(self.lie_algebra.basis)
         return -gs.einsum(
             "i...,ijk->...jk",
@@ -592,6 +596,7 @@ class _InvariantMetricMatrix(RiemannianMetric):
                      Journal of Nonlinear Mathematical Physics 11, no. 4, 2004:
                      480–98. https://doi.org/10.2991/jnmp.2004.11.4.5.
         """
+        # TODO: Try alternative hook + and //
         group = self.group
         basis = self.normal_basis(self.lie_algebra.basis)
         sign = 1.0 if self.left_or_right == "left" else -1.0
@@ -684,6 +689,7 @@ class _InvariantMetricMatrix(RiemannianMetric):
                      Journal of Nonlinear Mathematical Physics 11, no. 4, 2004:
                      480–98. https://doi.org/10.2991/jnmp.2004.11.4.5.
         """
+        # TODO: Try multishoot
         if hasattr(self.group, "are_antipodals") and not gs.all(
             ~self.group.are_antipodals(point, base_point)
         ):
