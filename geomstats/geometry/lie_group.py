@@ -620,12 +620,12 @@ class LieGroup(Manifold, abc.ABC):
 
         Parameters
         ----------
-        tangent_vec : array-like, shape=[..., {dim, [n, n]}]
+        tangent_vec : array-like, shape=[..., *shape]
             Tangent vector at base point.
 
         Returns
         -------
-        point : array-like, shape=[..., {dim, [n, n]}]
+        point : array-like, shape=[..., *shape]
             Group exponential.
         """
         raise NotImplementedError(
@@ -637,44 +637,40 @@ class LieGroup(Manifold, abc.ABC):
 
         Parameters
         ----------
-        tangent_vec : array-like, shape=[..., {dim, [n, n]}]
+        tangent_vec : array-like, shape=[..., *shape]
             Tangent vector at base point.
-        base_point : array-like, shape=[..., {dim, [n, n]}]
+        base_point : array-like, shape=[..., *shape]
             Base point.
 
         Returns
         -------
-        exp : array-like, shape=[..., {dim, [n, n]}]
+        exp : array-like, shape=[..., *shape]
             Group exponential.
         """
-        if self.default_point_type == "vector":
-            tangent_translation = self.tangent_translation_map(
-                point=base_point, left_or_right="left", inverse=True
-            )
+        tangent_translation = self.tangent_translation_map(
+            point=base_point, left_or_right="left", inverse=True
+        )
 
-            tangent_vec_at_id = tangent_translation(tangent_vec)
-            exp_from_identity = self.exp_from_identity(tangent_vec=tangent_vec_at_id)
-            exp = self.compose(base_point, exp_from_identity)
-            exp = self.regularize(exp)
-            return exp
-
-        lie_vec = self.compose(self.inverse(base_point), tangent_vec)
-        return self.compose(base_point, self.exp_from_identity(lie_vec))
+        tangent_vec_at_id = tangent_translation(tangent_vec)
+        exp_from_identity = self.exp_from_identity(tangent_vec=tangent_vec_at_id)
+        exp = self.compose(base_point, exp_from_identity)
+        exp = self.regularize(exp)
+        return exp
 
     def exp(self, tangent_vec, base_point=None):
         """Compute the group exponential at `base_point` of `tangent_vec`.
 
         Parameters
         ----------
-        tangent_vec : array-like, shape=[..., {dim, [n, n]}]
+        tangent_vec : array-like, shape=[..., *shape]
             Tangent vector at base point.
-        base_point : array-like, shape=[..., {dim, [n, n]}]
+        base_point : array-like, shape=[..., *shape]
             Base point.
             Optional, default: self.identity
 
         Returns
         -------
-        result : array-like, shape=[..., {dim, [n, n]}]
+        result : array-like, shape=[..., *shape]
             Group exponential.
         """
         identity = self.get_identity()
