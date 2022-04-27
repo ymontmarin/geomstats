@@ -28,9 +28,13 @@ class GeneralLinear(MatrixLieGroup, OpenSet):
         if "dim" not in kwargs.keys():
             kwargs["dim"] = n**2
         super(GeneralLinear, self).__init__(
-            ambient_space=Matrices(n, n), n=n, lie_algebra=SquareMatrices(n), **kwargs
+            ambient_space=Matrices(n, n), n=n, **kwargs
         )
         self.positive_det = positive_det
+
+    def _create_lie_algebra(self):
+        """Return the lie algebra object of the matrix lie group"""
+        return SquareMatrices(self.n)
 
     def projection(self, point):
         r"""Project a matrix to the general linear group.
