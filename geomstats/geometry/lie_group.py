@@ -204,14 +204,19 @@ class MatrixLieGroup(LieGroup, abc.ABC):
 
         Returns
         -------
-        is_tangent : bool
+        is_tangent : bool array-like shape=[...,]
             Boolean denoting if vector is a tangent vector at the base point.
         """
         if base_point is None:
             tangent_vec_at_id = vector
         else:
-            tangent_vec_at_id = self.compose(self.inverse(base_point), vector)
+            tangent_vec_at_id = Matrices.mul(
+                self.inverse(base_point),
+                vector
+            )
+
         is_tangent = self.lie_algebra.belongs(tangent_vec_at_id, atol)
+
         return is_tangent
 
     def to_tangent(self, vector, base_point=None):
