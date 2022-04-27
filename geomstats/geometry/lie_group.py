@@ -175,8 +175,9 @@ class MatrixLieGroup(LieGroup, abc.ABC):
             Lie bracket.
         """
         if base_point is None:
-            base_point = self.identity
-        inverse_base_point = self.inverse(base_point)
+            inverse_base_point = self.broadcast_identity(tangent_vector_a)
+        else:
+            inverse_base_point = self.inverse(base_point)
 
         first_term = Matrices.mul(inverse_base_point, tangent_vector_b)
         first_term = Matrices.mul(tangent_vector_a, first_term)
