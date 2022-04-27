@@ -113,55 +113,124 @@ class PullbackMetric(RiemannianMetric):
         return metric_mat[0] if base_point.ndim == 1 else metric_mat
 
 
-class PullbackDiffeoMetric(RiemannianMetric, abc.ABC):
-    """
-    Pullback metric via a diffeomorphism.
+class PullbackMetric(RiemannianMetric, abc.ABC):
 
-    Parameters
-    ----------
-    dim : int
-        Dimension.
-    """
-
-    def __init__(self, dim):
-        super(PullbackMetric, self).__init__(dim=dim)
-        self.embedding_space = self._create_embedding_space()
-        self.embedding_metric = self.embedding_space.metric
+    def __init__(self, dim, shape):
+        super(PullbackMetric, self).__init__(dim=dim, shape=shape)
+        self._embedding_space = None
         self._jacobian = None
-        self._inverse_jacobian = None
+        self.embedding_metric = self.embedding_space.metric
 
     @abc.abstractmethod
     def _create_embedding_space(self):
         pass
 
-    @abc.abstractmethod
-    def diffeomorphism(self, base_point):
-        pass
+    @property
+    def embedding_space(self):
+        """Lie algebra of the Matrix Lie group."""
+        if self._embedding_space is None:
+            self._embedding_space = self._create_embedding_space()
+        return self._embedding_space
 
     @abc.abstractmethod
-    def inverse_diffeomorphism(self, im_point):
+    def immersion(self, base_point):
         pass
 
     def jacobian(self, base_point):
-        # Can be overwritten or never use if tangent method are
-        # How it works when batched with autodiff ??
+        r"""Jacobian of the immersion at base point.
+
+        Let :math:`f` be the immersion
+        :math:`f: M \rightarrow N` of the manifold
+        :math:`M` into the manifold `N`.
+
+        Parameters
+        ----------
+        base_point : array-like, shape=[..., *shape_m]
+            Base point.
+            Optional, default: None.
+
+        Returns
+        -------
+        mat : array-like, shape=[..., *shape_e, *shape_m]
+            Inner-product matrix.
+        """
         if self._jacobian is None:
-            self._jacobian = gs.autodiff.jacobian(self.diffeomorphism)
-        return self._jacobian(base_point)
+            # Only compute graph once
+            self._jacobian = gs.autodiff.jacobian(self.immersion)
+
+        J = self._jacobian(base_point)
+        if base_point.shape != self.shape:
+            # We are [...,*shape]
+            J = gs.moveaxis(gs.diagonal(J, axis1=0, axis2=len(self.shape) + 1), -1, 0)
+        return J
+
+    def tangent_immersion(self, tangent_vec, base_point):
+        J = self.jacobian_immersion(base_point).reshape(-1, self.embedding_space.shape_dim, self.shape_dim)
+        tv = tangent_vec.reshape(-1, self.shape_dim)
+        res = gs.einsum('...ij,...j->...i', J, tv).reshape(-1, *self.embedding_space.shape)
+        if base_point.shape == self.shape:
+            return res[0]
+        return res
+
+    def metric_matrix(self, base_point):
+        local_basis = self.local_basis(base_point).reshape(-1, self.dim * self.shape_dim)
+
+        immersed_base_point = self.immersion(base_point)
+        immersed_local_basis = self.tangent_immersion(local_basis).reshape(-1, self.dim, *self.embedding_space.shape)
+
+        return self.embedding_metric.inner_product(
+                immersed_basis_element_i,
+                immersed_basis_element_j,
+                base_point=immersed_base_point,
+            )
+
+        immersed_base_point = self.immersion(base_point)
+        jacobian_immersion = self.jacobian_immersion(base_point)
+        basis_elements = gs.eye(self.dim)
+
+        @joblib.delayed
+        @joblib.wrap_non_picklable_objects
+        def pickable_inner_product(i, j):
+            immersed_basis_element_i = gs.matmul(jacobian_immersion, basis_elements[i])
+            immersed_basis_element_j = gs.matmul(jacobian_immersion, basis_elements[j])
+            return self.embedding_metric.inner_product(
+                immersed_basis_element_i,
+                immersed_basis_element_j,
+                base_point=immersed_base_point,
+            )
+
+        pool = joblib.Parallel(n_jobs=n_jobs, **joblib_kwargs)
+        out = pool(
+            pickable_inner_product(i, j)
+            for i, j in itertools.product(range(self.dim), range(self.dim))
+        )
+
+        metric_mat = gs.reshape(gs.array(out), (-1, self.dim, self.dim))
+        return metric_mat[0] if base_point.ndim == 1 else metric_mat
+
+
+
+
+
+class PullbackDiffeomorphismMetric(PullbackMetric, abc.ABC):
+
+    def __init__(self, dim):
+        super(PullbackDiffeomorphismMetric, self).__init__(dim=dim)
+        self._inverse_jacobian = None
+
+    @abc.abstractmethod
+    def inverse_immersion(self, im_point):
+        pass
 
     def inverse_jacobian(self, im_point):
         # Can be overwritten or never use if tangent method are
         # How it works when batched with autodiff ??
         if self._inverse_jacobian is None:
-            self._inverse_jacobian = gs.autodiff.jacobian(self.inverse_diffeomorphism)
+            self._inverse_jacobian = gs.autodiff.jacobian(self.inverse_immersion)
         return self._inverse_jacobian(im_point)
 
-    def tangent_diffeomorphism(self, tangent_vec, base_point):
-        # Can be overwritten when close form
-        # TODO: More general for shape
-        return gs.matmul(self.jacobian(base_point), tangent_vec)
 
-    def inverse_tangent_diffeomorphism(self, tangent_vec, im_point):
+    def inverse_tangent_immersion(self, tangent_vec, im_point):
         # Can be overwritten when close form
         # TODO: More general for shape
         return gs.matmul(self.inverse_jacobian(im_point), tangent_vec)
