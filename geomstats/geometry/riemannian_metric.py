@@ -60,9 +60,13 @@ class RiemannianMetric(Connection, ABC):
         mat : array-like, shape=[..., dim, dim]
             Inner-product matrix.
         """
-        raise NotImplementedError(
-            "The computation of the metric matrix" " is not implemented."
-        )
+        try:
+            # Default, behave have metric from R^shape
+            return self.manifold.local_gram(base_point)
+        except:
+            raise NotImplementedError(
+                "The computation of the metric matrix is not implemented."
+            )
 
     def cometric_matrix(self, base_point=None):
         """Inner co-product matrix at the cotangent space at a base point.

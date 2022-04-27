@@ -73,6 +73,18 @@ class Manifold(abc.ABC):
         self.default_point_type = default_point_type
         self.default_coords_type = default_coords_type
         self.metric = metric
+        self.metrics = []
+
+    def add_metric(self, metric):
+        """Add a metric to the instance's list of metrics.
+
+        Parameters
+        ----------
+        metric : RiemannianMetric
+            Metric to add.
+        """
+        metric.equip_on_manifold(self)
+        self.metrics.append(metric)
 
     @abc.abstractmethod
     def belongs(self, point, atol=gs.atol):
@@ -304,6 +316,7 @@ class Manifold(abc.ABC):
 
     @property
     def metric(self):
+        metric.equip_on_manifold(self)
         """Riemannian Metric associated to the Manifold."""
         return self._metric
 
