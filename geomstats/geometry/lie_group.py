@@ -114,8 +114,44 @@ class MatrixLieGroup(LieGroup, abc.ABC):
         if inverse:
             point = self.inverse(point)
         if left_or_right == "left":
-            return lambda tangent_vec: self.compose(point, tangent_vec)
-        return lambda tangent_vec: self.compose(tangent_vec, point)
+            return lambda tangent_vec: Matrices.mul(point, tangent_vec)
+        return lambda tangent_vec: Matrices.mul(tangent_vec, point)
+
+    def local_basis(self, base_point=None, left_or_right="left"):
+        """Local basis of the tangent space of the manifold at the point
+        It correspond to patial_i vector field suppose the manifold is XXXX
+
+        Parameters
+        ----------
+        base_point : array-like, shape=[..., n, n]
+            Point.
+
+        Returns
+        -------
+        local_basis : array-like, shape=[..., dim, n, n]
+            Bais.
+        """
+        # This is the default implementation 'intrinsic', 'vector', shape==(dim,)
+        if base_point is None:
+            return self.local_basis_at_identity()
+
+        n = self.n
+
+        lb = gs.expand_dims(self.local_basis_at_identity(), 0)
+        bp = gs.reshape(base_point, (-1, 1, n, n))
+
+        broadcat_shape = (bp.shape[0], self.dim, n, n)
+        broadcat_lb = gs.broadcast_to(lb, broadcat_shape)
+        broadcat_bp = gs.broadcast_to(bp, broadcat_shape)
+
+        if left_or_right == "left":
+            res = Matrices.mul(broadcat_bp, broadcat_lb)
+        elif left_or_right == "right":
+            res = Matrices.mul(broadcat_lb, broadcat_bp)
+
+        if base_point.shape == self.shape:
+            return new_basis[0]
+        return new_basis
 
     def lie_bracket(self, tangent_vector_a, tangent_vector_b, base_point=None):
         """Compute the lie bracket of two tangent vectors.
