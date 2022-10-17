@@ -347,6 +347,12 @@ class PullbackMetric(RiemannianMetric, abc.ABC):
     def jacobian(self, base_point):
         r"""Jacobian of the immersion at base point.
 
+        Let :math:`f` be the immersion
+        :math:`f: M \rightarrow N` of the manifold
+        :math:`M` into the manifold `N`.
+
+        Parameters
+        ----------
         base_point : array-like, shape=[..., *shape_m]
             Base point.
             Optional, default: None.

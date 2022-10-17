@@ -35,6 +35,10 @@ class GeneralLinear(MatrixLieGroup, OpenSet):
 
         self.positive_det = positive_det
 
+    def _create_lie_algebra(self):
+        """Return the lie algebra object of the matrix lie group."""
+        return SquareMatrices(self.n)
+
     def projection(self, point):
         r"""Project a matrix to the general linear group.
 

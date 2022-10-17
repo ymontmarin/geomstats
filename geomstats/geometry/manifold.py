@@ -273,6 +273,7 @@ class Manifold(abc.ABC):
         the vector in standard shape form
         v=sum v^i e_i = P[v^i] where P = [e_i]
 
+
         Parameters
         ----------
         vector_intra : array-like, shape=[..., dim]
@@ -341,7 +342,7 @@ class Manifold(abc.ABC):
         n_samples : int
             Number of samples.
             Optional, default: 1.
-        base_point :  array-like, shape=[*shape]
+        base_point :  array-like, shape=[..., *shape]
             Point.
 
         Returns
@@ -356,12 +357,16 @@ class Manifold(abc.ABC):
             and base_point.ndim > len(self.shape)
             and n_samples != len(base_point)
         ):
+            new_shape = (n_samples,) + self.shape
+        try:
+            base_point = gs.broadcast_to(base_point, new_shape)
+        except ValueError:
             raise ValueError(
                 "The number of base points must be the same as the "
                 "number of samples, when different from 1."
             )
-        return gs.squeeze(
-            self.to_tangent(
-                gs.random.normal(size=(n_samples,) + self.shape), base_point
-            )
-        )
+        draw = self.to_tangent(gs.random.normal(size=new_shape), base_point)
+
+        if n_samples == 1:
+            return draw[0]
+        return draw

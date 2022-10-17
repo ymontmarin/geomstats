@@ -58,23 +58,7 @@ class LieGroup(Manifold, abc.ABC):
             group=self, metric_mat_at_identity=gs.eye(self.dim), left_or_right="left"
         )
 
-        self.right_canonical_metric = InvariantMetric(
-            group=self, metric_mat_at_identity=gs.eye(self.dim), left_or_right="right"
-        )
-
-        self.metric = self.left_canonical_metric
-        self.add_metric(self.left_canonical_metric)
-        self.add_metric(self.right_canonical_metric)
-
-    @property
-    def lie_algebra(self):
-        """Lie algebra of the Matrix Lie group."""
-        if self._lie_algebra is None:
-            self._lie_algebra = self._create_lie_algebra()
-        return self._lie_algebra
-
-    @abc.abstractmethod
-    def get_identity(self):
+    def get_identity(self, point):
         """Get the identity of the group.
 
         Returns
@@ -224,7 +208,7 @@ class LieGroup(Manifold, abc.ABC):
 
         Parameters
         ----------
-        point : array-like, shape=[..., {dim, [n, n]]
+        point : array-like, shape=[..., n, n]
             Point.
         left_or_right : str, {'left', 'right'}
             Whether to calculate the differential of left or right
@@ -652,6 +636,84 @@ class MatrixLieGroup(LieGroup, abc.ABC):
         """
         return gs.linalg.inv(point)
 
+    def jacobian_translation(self, point, left_or_right="left", inverse=False):
+        """Compute the Jacobian of left/right translation by a point.
+
+        Compute the Jacobian matrix of the left translation by the point.
+
+        Parameters
+        ----------
+        point : array-like, shape=[..., *shape]
+            Point.
+        left_or_right : str, {'left', 'right'}
+            Indicate whether to calculate the differential of left or right
+            translations.
+            Optional, default: 'left'.
+
+        Returns
+        -------
+        jacobian : array-like, shape=[..., *shape, *shape]
+            Jacobian of the left/right translation by point.
+        """
+        errors.check_parameter_accepted_values(
+            left_or_right, "left_or_right", ["left", "right"]
+        )
+
+        if left_or_right == "left":
+
+            def action(x):
+                return self.compose(point, x)
+
+        elif left_or_right == "right":
+
+            def action(x):
+                return self.compose(x, point)
+
+        jacobian_fun = gs.autodiff.jacobian(action)
+        identity = self.broadcast_identity(point)
+
+        jacobian_matrix = jacobian_fun(identity)
+
+        if point.shape != self.shape:
+            # we are batched, restore batch dim as first axis
+            jacobian_matrix = gs.moveaxis(
+                gs.diagonal(jacobian_matrix, axis1=0, axis2=len(self.shape) + 1), -1, 0
+            )
+
+        if not inverse:
+            return jacobian_matrix
+
+        # We need to invere if required
+        if self.full_intrinsic:
+            return gs.linalg.inv(jacobian_matrix)
+
+        # In general case, we need to transform to have the right expression
+        lb_i = self.local_basis(identity)
+        lb_p = self.local_basis(point)
+
+        # J' = B_pJB_I^T
+        peudo_J = gs.einsum(
+            "...ij,...jk,...lk->...il",
+            gs.reshape(lb_p, (-1, self.dim, self.shape_dim)),
+            gs.reshape(jacobian_matrix, (-1, self.shape_dim, self.shape_dim)),
+            gs.reshape(lb_i, (-1, self.dim, self.shape_dim)),
+            optimize="optimal",
+        )
+
+        # J^-1^ext = B_I^TJ'^-1B_p
+        aux = gs.einsum(
+            "...ji,...jk,...kl->...il",
+            gs.reshape(lb_i, (-1, self.dim, self.shape_dim)),
+            gs.linalg.inv(peudo_J),
+            gs.reshape(lb_p, (-1, self.dim, self.shape_dim)),
+            optimize="optimal",
+        )
+        res = gs.reshape(aux, (-1,) + self.shape + self.shape)
+
+        if point.shape == self.shape:
+            return res[0]
+        return res
+
     def tangent_translation_map(self, point, left_or_right="left", inverse=False):
         r"""Compute the push-forward map by the left/right translation.
 
@@ -737,16 +799,16 @@ class MatrixLieGroup(LieGroup, abc.ABC):
 
         Parameters
         ----------
-        tangent_vector_a : array-like, shape=[..., n, n]
+        tangent_vector_a : array-like, shape=[..., *shape]
             Tangent vector at base point.
-        tangent_vector_b : array-like, shape=[..., n, n]
+        tangent_vector_b : array-like, shape=[..., *shape]
             Tangent vector at base point.
-        base_point : array-like, shape=[..., n, n]
+        base_point : array-like, shape=[..., *shape]
             Base point.
 
         Returns
         -------
-        bracket : array-like, shape=[..., n, n]
+        bracket : array-like, shape=[..., *shape]
             Lie bracket.
         """
         if base_point is None:
@@ -804,7 +866,7 @@ class MatrixLieGroup(LieGroup, abc.ABC):
 
         Returns
         -------
-        tangent_vec : array-like, shape=[..., n, n]
+        tangent_vec : array-like, shape=[..., *shape]
             Tangent vector at base point.
         """
         if base_point is None:
