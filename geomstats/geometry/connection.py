@@ -11,8 +11,7 @@ import geomstats.backend as gs
 import geomstats.errors
 from geomstats.integrator import integrate
 
-N_STEPS = 10
-POINT_TYPES = {1: "vector", 2: "matrix", 3: "matrix"}
+N_STEPS = 100
 
 
 class Connection(ABC):
@@ -25,17 +24,12 @@ class Connection(ABC):
     shape : tuple of int
         Shape of one element of the manifold.
         Optional, default : (dim, ).
-    default_point_type : str, {\'vector\', \'matrix\'}
-        Point type.
-        Optional, default: \'vector\'.
     default_coords_type : str, {\'intrinsic\', \'extrinsic\', etc}
         Coordinate type.
         Optional, default: \'intrinsic\'.
     """
 
-    def __init__(
-        self, dim, shape=None, default_point_type=None, default_coords_type="intrinsic"
-    ):
+    def __init__(self, dim, shape=None, default_coords_type="intrinsic"):
         geomstats.errors.check_integer(dim, "dim")
 
         if shape is None:
@@ -43,15 +37,7 @@ class Connection(ABC):
         if not isinstance(shape, tuple):
             raise ValueError("Expected a tuple for the shape argument.")
 
-        if default_point_type is None:
-            try:
-                default_point_type = POINT_TYPES[len(shape)]
-            except IndexError:
-                default_point_type = 'tensor'
-
-        geomstats.errors.check_parameter_accepted_values(
-            default_point_type, "default_point_type", ["vector", "matrix", "tensor"]
-        )
+        # TODO: Diffuse new coor type form
 
         shape_dim = gs.prod(shape)
         if default_coords_type == "intrinsic" and not shape_dim == dim:
@@ -61,23 +47,38 @@ class Connection(ABC):
         self.dim = dim
         self.shape = shape
         self.shape_dim = shape_dim
-        self.default_point_type = default_point_type
         self.default_coords_type = default_coords_type
         self.manifold = None
 
     def equip_on_manifold(self, manifold):
+        """Point type.
+
+        `vector` or `matrix`.
+        """
         # Adapt to manifold dimension
         self.dim = manifold.dim
         # Test that it fit in coordtype
         if not self.shape == manifold.shape:
             raise Exception(
-                f'Metric {self.__class__.__name__} does not fit '
-                f'Manifold {manifold.__class__.__name__}'
+                f"Metric {self.__class__.__name__} does not fit "
+                f"Manifold {manifold.__class__.__name__}"
             )
         self.manifold = manifold
 
+    @property
+    def default_point_type(self):
+        """Point type.
+
+        `vector` or `matrix`.
+        """
+        if len(self.shape) == 1:
+            return "vector"
+        return "matrix"
+
     def christoffels(self, base_point):
         """Christoffel symbols associated with the connection.
+
+        The contravariant index is on the first dimension.
 
         Parameters
         ----------
@@ -115,11 +116,7 @@ class Connection(ABC):
         if not self.full_intrinsic:
             velocity = self.manifold.local_basis_representation(velocity, position)
 
-        aux = gs.einsum(
-            "...kij,...i->...kj",
-            gamma,
-            velocity
-        )
+        aux = gs.einsum("...kij,...i->...kj", gamma, velocity)
         accel = -gs.einsum("...kj,...j->...k", aux, velocity)
 
         if not self.full_intrinsic:
@@ -127,15 +124,7 @@ class Connection(ABC):
 
         return gs.stack([velocity, accel], axis=0)
 
-    def exp(
-        self,
-        tangent_vec,
-        base_point,
-        n_steps=N_STEPS,
-        step="euler",
-        point_type=None,
-        **kwargs
-    ):
+    def exp(self, tangent_vec, base_point, n_steps=N_STEPS, step="euler", **kwargs):
         """Exponential map associated to the affine connection.
 
         Exponential map at base_point of tangent_vec computed by integration
@@ -154,9 +143,6 @@ class Connection(ABC):
         step : str, {'euler', 'rk4'}
             The numerical scheme to use for integration.
             Optional, default: 'euler'.
-        point_type : str, {'vector', 'matrix'}
-            Type of representation used for points.
-            Optional, default: None.
 
         Returns
         -------
@@ -167,14 +153,14 @@ class Connection(ABC):
             # TODO: Maybe projected integration or other adapted scheme
             # by hooking the + in integration scheme
             print(
-                "WARNING: This implementation of geodesic equation integration was intended "
-                "for full intrinsic coordinates."
+                "WARNING: This implementation of geodesic equation integration was "
+                "intended for full intrinsic coordinates."
             )
 
-        i_state = gs.stack([velocity, accel], axis=0)
-        flow = integrate(
-            self.geodesic_equation, i_state, n_steps=n_steps, step=step
-        )
+        base_point = gs.broadcast_to(base_point, tangent_vec.shape)
+        i_state = gs.stack([base_point, tangent_vec], axis=0)
+
+        flow = integrate(self.geodesic_equation, i_state, n_steps=n_steps, step=step)
 
         return flow[-1][0]
 
@@ -219,7 +205,7 @@ class Connection(ABC):
         point = gs.reshape(point, (-1,) + self.shape)
 
         def objective(velocity):
-            """Define the objective function. For velocity in local basis"""
+            """Define the objective function. For velocity in local basis."""
             velocity = gs.array(velocity)
             velocity = gs.cast(velocity, dtype=base_point.dtype)
             delta = self.exp(velocity, base_point, n_steps, step) - point
@@ -282,9 +268,9 @@ class Connection(ABC):
         References
         ----------
         .. [LP2013a] Marco Lorenzi, Xavier Pennec. Efficient Parallel Transport
-         of Deformations in Time Series of Images: from Schild's to
-         Pole Ladder. Journal of Mathematical Imaging and Vision, Springer
-         Verlag, 2013,50 (1-2), pp.5-17. ⟨10.1007/s10851-013-0470-3⟩
+            of Deformations in Time Series of Images: from Schild's to
+            Pole Ladder. Journal of Mathematical Imaging and Vision, Springer
+            Verlag, 2013,50 (1-2), pp.5-17. ⟨10.1007/s10851-013-0470-3⟩
         """
         mid_tangent_vector_to_shoot = (
             1.0 / 2.0 * self.log(base_point=base_point, point=next_point, **kwargs)
@@ -347,9 +333,9 @@ class Connection(ABC):
         References
         ----------
         .. [LP2013a] Marco Lorenzi, Xavier Pennec. Efficient Parallel Transport
-         of Deformations in Time Series of Images: from Schild's to
-         Pole Ladder. Journal of Mathematical Imaging and Vision, Springer
-         Verlag, 2013,50 (1-2), pp.5-17. ⟨10.1007/s10851-013-0470-3⟩
+            of Deformations in Time Series of Images: from Schild's to
+            Pole Ladder. Journal of Mathematical Imaging and Vision, Springer
+            Verlag, 2013,50 (1-2), pp.5-17. ⟨10.1007/s10851-013-0470-3⟩
         """
         mid_tangent_vector_to_shoot = (
             1.0 / 2.0 * self.log(base_point=base_shoot, point=next_point, **kwargs)
@@ -390,7 +376,7 @@ class Connection(ABC):
         n_rungs=1,
         scheme="pole",
         alpha=1,
-        **single_step_kwargs
+        **single_step_kwargs,
     ):
         """Approximate parallel transport using the pole ladder scheme.
 
@@ -437,15 +423,15 @@ class Connection(ABC):
         References
         ----------
         .. [LP2013b] Lorenzi, Marco, and Xavier Pennec. “Efficient Parallel
-        Transport of Deformations in Time Series of Images: From Schild to
-        Pole Ladder.” Journal of Mathematical Imaging and Vision 50, no. 1
-        (September 1, 2014): 5–17. https://doi.org/10.1007/s10851-013-0470-3.
-
+            Transport of Deformations in Time Series of Images: From Schild to
+            Pole Ladder.” Journal of Mathematical Imaging and Vision 50, no. 1
+            (September 1, 2014): 5–17.
+            https://doi.org/10.1007/s10851-013-0470-3.
 
         .. [GP2020] Guigui, Nicolas, and Xavier Pennec. “Numerical Accuracy
-        of Ladder Schemes for Parallel Transport on Manifolds.”
-        Foundations of Computational Mathematics, June 18, 2021.
-        https://doi.org/10.1007/s10208-021-09515-x.
+            of Ladder Schemes for Parallel Transport on Manifolds.”
+            Foundations of Computational Mathematics, June 18, 2021.
+            https://doi.org/10.1007/s10208-021-09515-x.
         """
         geomstats.errors.check_integer(n_rungs, "n_rungs")
         if alpha < 1:
@@ -463,7 +449,7 @@ class Connection(ABC):
                 base_point=current_point,
                 next_point=next_point,
                 base_shoot=base_shoot,
-                **single_step_kwargs
+                **single_step_kwargs,
             )
             current_point = next_point
             base_shoot = next_step["end_point"]
@@ -478,14 +464,79 @@ class Connection(ABC):
             "trajectory": trajectory,
         }
 
-    def curvature(self, tangent_vec_a, tangent_vec_b, tangent_vec_c, base_point):
-        r"""Compute the curvature.
+    def riemann_tensor(self, base_point):
+        r"""Compute Riemannian tensor at base_point.
 
-        For three vectors fields :math:`X|_P = tangent_vec_a,
-        Y|_P = tangent_vec_b, Z|_P = tangent_vec_c` with tangent vector
-        specified in argument at the base point :math:`P`,
-        the curvature is defined by :math:`R(X,Y)Z = \nabla_{[X,Y]}Z
-        - \nabla_X\nabla_Y Z + \nabla_Y\nabla_X Z`.
+        In the literature the riemannian curvature tensor is noted :math:`R_{ijk}^l`.
+
+        Following tensor index convention (ref. Wikipedia), we have:
+        :math:`R_{ijk}^l = dx^l(R(X_j, X_k)X_i)`
+
+        which gives :math:`R_{ijk}^lk` as a sum of four terms:
+        :math:`R_{ijk}^l =
+        :math:`\partial_j \Gamma^l_{ki}`
+        :math:`- \partial_k \Gamma^l_{ji}`
+        :math:`+ \Gamma^l_{jm} \Gamma^m_{ki}`
+        :math:`- \Gamma^l_{km} \Gamma^m_{ji}`
+
+        Note that geomstats puts the contravariant index on
+        the first dimension of the Christoffel symbols.
+
+        Parameters
+        ----------
+        base_point :  array-like, shape=[..., dim]
+            Point on the manifold.
+
+        Returns
+        -------
+        riemann_curvature : array-like, shape=[..., dim, dim,
+                                                    dim, dim]
+            riemann_tensor[...,i,j,k,l] = R_{ijk}^l
+            Riemannian tensor curvature,
+            with the contravariant index on the last dimension.
+        """
+        if len(self.shape) > 1:
+            raise NotImplementedError(
+                "Riemann tensor not implemented for manifolds with points of ndim > 1."
+            )
+        base_point = gs.to_ndarray(base_point, to_ndim=2)
+        christoffels = self.christoffels(base_point)
+        jacobian_christoffels = gs.squeeze(
+            gs.stack(
+                [
+                    gs.autodiff.jacobian(self.christoffels)(point)
+                    for point in base_point
+                ],
+                axis=0,
+            )
+        )
+        prod_christoffels = gs.einsum(
+            "...ijk,...klm->...ijlm", christoffels, christoffels
+        )
+        riemann_curvature = (
+            gs.einsum("...ijlm->...lmji", jacobian_christoffels)
+            - gs.einsum("...ijlm->...ljmi", jacobian_christoffels)
+            + gs.einsum("...ijlm->...mjli", prod_christoffels)
+            - gs.einsum("...ijlm->...lmji", prod_christoffels)
+        )
+        if riemann_curvature.ndim == 5 and base_point.ndim == 1:
+            riemann_curvature = riemann_curvature[0]
+
+        return riemann_curvature
+
+    def curvature(self, tangent_vec_a, tangent_vec_b, tangent_vec_c, base_point):
+        r"""Compute the Riemann curvature map R.
+
+        For three tangent vectors at base point :math:`P`:
+        - :math:`X|_P = tangent\_vec\_a`,
+        - :math:`Y|_P = tangent\_vec\_b`,
+        - :math:`Z|_P = tangent\_vec\_c`,
+        the curvature(X, Y, Z, P) is defined by
+        :math:`R(X,Y)Z = \nabla_X \nabla_Y Z - \nabla_Y \nabla_X Z - \nabla_[X, Y]Z`.
+
+        The output is the tangent vector:
+        :math:`dx^l(R(X, Y)Z) = R_{ijk}^l X_j Y_k Z_i`
+        written with Einstein notation.
 
         Parameters
         ----------
@@ -503,15 +554,47 @@ class Connection(ABC):
         curvature : array-like, shape=[..., *shape]
             Tangent vector at `base_point`.
         """
-        raise NotImplementedError("The curvature is not implemented.")
+        riemann = self.riemann_tensor(base_point)
+        curvature = gs.einsum(
+            "...ijkl, ...j, ...k, ...i -> ...l",
+            riemann,
+            tangent_vec_a,
+            tangent_vec_b,
+            tangent_vec_c,
+        )
+        return curvature
+
+    def ricci_tensor(self, base_point):
+        r"""Compute Ricci curvature tensor at base_point.
+
+        The Ricci curvature tensor :math:`\mathrm{Ric}_{ij}` is defined as:
+        :math:`\mathrm{Ric}_{ij} = R_{ikj}^k`
+        with Einstein notation.
+
+        Parameters
+        ----------
+        base_point :  array-like, shape=[..., dim]
+            Point on the manifold.
+
+        Returns
+        -------
+        ricci_tensor : array-like, shape=[..., dim, dim]
+            ricci_tensor[...,i,j] = Ric_{ij}
+            Ricci tensor curvature.
+        """
+        riemann_tensor = self.riemann_tensor(base_point)
+        ricci_tensor = gs.einsum("...ijkj -> ...ik", riemann_tensor)
+        return ricci_tensor
 
     def directional_curvature(self, tangent_vec_a, tangent_vec_b, base_point):
-        """Compute the directional curvature (tidal force operator).
+        r"""Compute the directional curvature (tidal force operator).
 
-        For two vectors fields :math:`X|_P = tangent_vec_a`, and :math:
-        `Y|_P = tangent_vec_b` with tangent vector specified in argument at
-        the base point :math:`P`, the directional curvature, better known
-        in relativity as the tidal force operator, is defined by
+        For two tangent vectors at base_point :math:`P`:
+        - :math:`X|_P = tangent\_vec\_a`,
+        - :math:`Y|_P = tangent\_vec\_b`,
+        the directional curvature, better known
+        in relativity as the tidal force operator,
+        is defined by
         :math:`R_Y(X) = R(Y,X)Y`.
 
         Parameters
@@ -540,11 +623,13 @@ class Connection(ABC):
     ):
         r"""Compute the covariant derivative of the curvature.
 
-        For four vectors fields :math:`H|_P = tangent_vec_a, X|_P =
-        tangent_vec_b, Y|_P = tangent_vec_c, Z|_P = tangent_vec_d` with
-        tangent vector value specified in argument at the base point `P`,
-        the covariant derivative of the curvature
-        :math:`(\nabla_H R)(X, Y) Z |_P` is computed at the base point P.
+        For four tangent vectors at base_point :math:`P`:
+        - :math:`H|_P = tangent\_vec\_a`,
+        - :math:`X|_P = tangent\_vec\_b`,
+        - :math:`Y|_P = tangent\_vec\_c`,
+        - :math:`Z|_P = tangent\_vec\_d`,
+        the covariant derivative of the curvature is defined as:
+        :math:`(\nabla_H R)(X, Y) Z |_P`.
 
         Parameters
         ----------
@@ -564,37 +649,44 @@ class Connection(ABC):
         curvature_derivative : array-like, shape=[..., *shape]
             Tangent vector at base-point.
         """
-        raise NotImplementedError("The curvature is not implemented.")
+        raise NotImplementedError(
+            "The covariant derivative of the curvature is not implemented."
+        )
 
     def directional_curvature_derivative(
         self, tangent_vec_a, tangent_vec_b, base_point=None
     ):
         r"""Compute the covariant derivative of the directional curvature.
 
-        For two vectors fields :math:`X|_P = tangent_vec_a, Y|_P =
-        tangent_vec_b` with tangent vector value specified in argument at the
-        base point `P`, the covariant derivative (in the direction 'X')
+        For tangent vector fields at base_point :math:`P`:
+        - :math:`X|_P = tangent\_vec\_a`,
+        - :math:`Y|_P = tangent\_vec\_b`,
+        the covariant derivative (in the direction `X`)
         :math:`(\nabla_X R_Y)(X) |_P = (\nabla_X R)(Y, X) Y |_P` of the
         directional curvature (in the direction `Y`)
-        :math:`R_Y(X) = R(Y, X) Y`  is a quadratic tensor in 'X' and 'Y' that
+        :math:`R_Y(X) = R(Y, X) Y`
+        is a quadratic tensor in `X` and `Y` that
         plays an important role in the computation of the moments of the
         empirical Fréchet mean.
 
         References
         ----------
         .. [Pennec] Pennec, Xavier. Curvature effects on the empirical mean in
-        Riemannian and affine Manifolds: a non-asymptotic high concentration
-        expansion in the small-sample regime. Preprint. June 2019.
-        https://arxiv.org/abs/1906.07418
+            Riemannian and affine Manifolds: a non-asymptotic high
+            concentration expansion in the small-sample regime. Preprint. 2019.
+            https://arxiv.org/abs/1906.07418
         """
         return self.curvature_derivative(
             tangent_vec_a, tangent_vec_b, tangent_vec_a, tangent_vec_b, base_point
         )
 
-    def geodesic(self, initial_point, end_point=None, initial_tangent_vec=None):
+    def geodesic(
+        self, initial_point, end_point=None, initial_tangent_vec=None, **exp_kwargs
+    ):
         """Generate parameterized function for the geodesic curve.
 
         Geodesic curve defined by either:
+
         - an initial point and an initial tangent vector,
         - an initial point and an end point.
 
@@ -632,16 +724,15 @@ class Connection(ABC):
             if end_point.shape != initial_point.shape:
                 multi_init = True
                 initial_point = gs.broadcast_to(
-                    gs.expand_dims(initial_point, axis=int(batched)),
-                    g_shape
+                    gs.expand_dims(initial_point, axis=int(batched)), g_shape
                 )
 
             shooting_tangent_vec = gs.reshape(
                 self.log(
                     point=gs.reshape(end_point, (-1) + self.shape),
-                    base_point=gs.reshape(initial_point, (-1) + self.shape)
+                    base_point=gs.reshape(initial_point, (-1) + self.shape),
                 ),
-                g_shape
+                g_shape,
             )
 
             if initial_tangent_vec is not None:
@@ -656,8 +747,7 @@ class Connection(ABC):
         if initial_tangent_vec.shape != initial_point.shape:
             multi_init = True
             initial_point = gs.broadcast_to(
-                gs.expand_dims(initial_point, axis=int(batched)),
-                g_shape
+                gs.expand_dims(initial_point, axis=int(batched)), g_shape
             )
 
         def path(t):
@@ -670,22 +760,22 @@ class Connection(ABC):
             """
             t = gs.array(t)
             t = gs.cast(t, initial_tangent_vec.dtype)
-            r_shape = g_shape[:batched + multi_init] + (len(t),) + self.shape
+            r_shape = g_shape[: batched + multi_init] + (len(t),) + self.shape
 
             tangent_vecs = gs.einsum(
-                "i,...k->...ik", t,
-                gs.reshape(initial_tangent_vec, (-1, self.shape_dim))
+                "i,...k->...ik",
+                t,
+                gs.reshape(initial_tangent_vec, (-1, self.shape_dim)),
             )
             tangent_vecs = gs.reshape(tangent_vecs, r_shape)
 
-            initial_point = gs.broadcast_to(
-                gs.expand_dims(initial_point, axis=batched + multi_init),
-                r_shape
+            loc_initial_point = gs.broadcast_to(
+                gs.expand_dims(initial_point, axis=batched + multi_init), r_shape
             )
 
             points_at_time_t = self.exp(
                 gs.reshape(tangent_vecs, (-1,) + self.shape),
-                gs.reshape(initial_point, (-1,) + self.shape)
+                gs.reshape(loc_initial_point, (-1,) + self.shape),
             )
             return gs.reshape(points_at_time_t, r_shape)
 
@@ -698,7 +788,7 @@ class Connection(ABC):
 
         Closed-form solution for the parallel transport of a tangent vector
         along the geodesic between two points `base_point` and `end_point`
-        or alternatively defined by :math:`t\mapsto exp_(base_point)(
+        or alternatively defined by :math:`t \mapsto exp_{(base\_point)}(
         t*direction)`.
 
         Parameters
@@ -729,8 +819,8 @@ class Connection(ABC):
         """Compute the radius of the injectivity domain.
 
         This is is the supremum of radii r for which the exponential map is a
-        diffeomorphism from the open ball of radius r centered at the base point onto
-        its image.
+        diffeomorphism from the open ball of radius r centered at the base
+        point onto its image.
 
         Parameters
         ----------

@@ -27,14 +27,13 @@ class GeneralLinear(MatrixLieGroup, OpenSet):
     def __init__(self, n, positive_det=False, **kwargs):
         if "dim" not in kwargs.keys():
             kwargs["dim"] = n**2
-        super(GeneralLinear, self).__init__(
-            ambient_space=Matrices(n, n), n=n, **kwargs
-        )
-        self.positive_det = positive_det
+        embedding_space = Matrices(n, n)
+        kwargs.setdefault("dim", n**2)
+        kwargs.setdefault("metric", embedding_space.metric)
 
-    def _create_lie_algebra(self):
-        """Return the lie algebra object of the matrix lie group"""
-        return SquareMatrices(self.n)
+        super(GeneralLinear, self).__init__(ambient_space=Matrices(n, n), n=n, **kwargs)
+
+        self.positive_det = positive_det
 
     def projection(self, point):
         r"""Project a matrix to the general linear group.
@@ -79,7 +78,7 @@ class GeneralLinear(MatrixLieGroup, OpenSet):
         belongs : array-like, shape=[...,]
             Boolean denoting if point is in GL(n).
         """
-        has_right_size = self.ambient_space.belongs(point)
+        has_right_size = self.embedding_space.belongs(point)
         if gs.all(has_right_size):
             det = gs.linalg.det(point)
             return det > atol if self.positive_det else gs.abs(det) > atol
@@ -180,7 +179,7 @@ class SquareMatrices(MatrixLieAlgebra):
     """
 
     def __init__(self, n):
-        super(SquareMatrices, self).__init__(n=n, dim=n**2)
+        super().__init__(n=n, dim=n**2)
         self.mat_space = Matrices(n, n)
 
     def _create_basis(self):

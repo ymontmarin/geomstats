@@ -8,8 +8,6 @@ import abc
 import geomstats.backend as gs
 from geomstats.geometry.manifold import Manifold
 
-POINT_TYPES = {1: "vector", 2: "matrix"}
-
 
 class VectorSpace(Manifold, abc.ABC):
     """Abstract class for vector spaces.
@@ -19,15 +17,11 @@ class VectorSpace(Manifold, abc.ABC):
     shape : tuple
         Shape of the elements of the vector space. The dimension is the
         product of these values by default.
-    default_point_type : str, {'vector', 'matrix'}
-        Point type.
-        Optional, default: 'vector'.
     """
 
     def __init__(self, shape, **kwargs):
-        if "dim" not in kwargs.keys():
-            kwargs["dim"] = int(gs.prod(gs.array(shape)))
-        super(VectorSpace, self).__init__(shape=shape, **kwargs)
+        kwargs.setdefault("dim", int(gs.prod(gs.array(shape))))
+        super().__init__(shape=shape, **kwargs)
         self.shape = shape
         self._basis = None
 
@@ -48,7 +42,10 @@ class VectorSpace(Manifold, abc.ABC):
         belongs : array-like, shape=[...,]
             Boolean evaluating if point belongs to the space.
         """
+        point = gs.array(point)
         minimal_ndim = len(self.shape)
+        if self.shape[0] == 1 and len(point.shape) <= 1:
+            point = gs.transpose(gs.to_ndarray(gs.to_ndarray(point, 1), 2))
         belongs = point.shape[-minimal_ndim:] == self.shape
         if point.ndim <= minimal_ndim:
             return belongs
@@ -183,14 +180,8 @@ class LevelSet(Manifold, abc.ABC):
         default_coords_type="intrinsic",
         **kwargs
     ):
-        if "shape" not in kwargs:
-            kwargs["shape"] = embedding_space.shape
-        super(LevelSet, self).__init__(
-            dim=dim,
-            default_point_type=embedding_space.default_point_type,
-            default_coords_type=default_coords_type,
-            **kwargs
-        )
+        kwargs.setdefault("shape", embedding_space.shape)
+        super().__init__(dim=dim, default_coords_type=default_coords_type, **kwargs)
         self.embedding_space = embedding_space
         self.embedding_metric = embedding_space.metric
         self.submersion = submersion
@@ -321,25 +312,22 @@ class LevelSet(Manifold, abc.ABC):
 class OpenSet(Manifold, abc.ABC):
     """Class for manifolds that are open sets of a vector space.
 
-    In this case, tangent vectors are identified with vectors of the ambient
+    In this case, tangent vectors are identified with vectors of the embedding
     space.
 
     Parameters
     ----------
     dim: int
-        Dimension of the manifold. It is often the same as the ambient space
+        Dimension of the manifold. It is often the same as the embedding space
         dimension but may differ in some cases.
-    ambient_space: VectorSpace
-        Ambient space that contains the manifold.
+    embedding_space: VectorSpace
+        Embedding space that contains the manifold.
     """
 
-    def __init__(self, dim, ambient_space, **kwargs):
-        if "default_point_type" not in kwargs:
-            kwargs["default_point_type"] = ambient_space.default_point_type
-        if "shape" not in kwargs:
-            kwargs["shape"] = ambient_space.shape
+    def __init__(self, dim, embedding_space, **kwargs):
+        kwargs.setdefault("shape", embedding_space.shape)
         super().__init__(dim=dim, **kwargs)
-        self.ambient_space = ambient_space
+        self.embedding_space = embedding_space
 
     def is_tangent(self, vector, base_point=None, atol=gs.atol):
         """Check whether the vector is tangent at base_point.
@@ -359,7 +347,7 @@ class OpenSet(Manifold, abc.ABC):
         is_tangent : bool
             Boolean denoting if vector is a tangent vector at the base point.
         """
-        return self.ambient_space.belongs(vector, atol)
+        return self.embedding_space.belongs(vector, atol)
 
     def to_tangent(self, vector, base_point=None):
         """Project a vector to a tangent space of the manifold.
@@ -376,7 +364,7 @@ class OpenSet(Manifold, abc.ABC):
         tangent_vec : array-like, shape=[..., dim]
             Tangent vector at base point.
         """
-        return self.ambient_space.projection(vector)
+        return self.embedding_space.projection(vector)
 
     def random_point(self, n_samples=1, bound=1.0):
         """Sample random points on the manifold.
@@ -397,17 +385,17 @@ class OpenSet(Manifold, abc.ABC):
         samples : array-like, shape=[..., {dim, [n, n]}]
             Points sampled on the hypersphere.
         """
-        sample = self.ambient_space.random_point(n_samples, bound)
+        sample = self.embedding_space.random_point(n_samples, bound)
         return self.projection(sample)
 
     @abc.abstractmethod
     def projection(self, point):
-        """Project a point in ambient manifold on manifold.
+        """Project a point in embedding manifold on manifold.
 
         Parameters
         ----------
         point : array-like, shape=[..., dim]
-            Point in ambient manifold.
+            Point in embedding manifold.
 
         Returns
         -------

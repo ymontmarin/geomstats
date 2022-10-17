@@ -4,15 +4,17 @@ Lead author: Nicolas Guigui.
 
 These are designed for first order ODE written of a variable x and a time
 variable t:
+
 .. math::
 
-                    \frac{dx}{dt} = force(x, t)
+    \frac{dx}{dt} = force(x, t)
 
-where :math: `x` is called the state variable. It may represent many
+where :math:`x` is called the state variable. It may represent many
 variables by stacking arrays, e.g. position and velocity in a geodesic
 equation.
 """
 
+import geomstats.backend as gs
 from geomstats.errors import check_parameter_accepted_values
 
 STEP_FUNCTIONS = {
@@ -199,7 +201,7 @@ def integrate(function, initial_state, end_time=1.0, n_steps=10, step="euler"):
     check_parameter_accepted_values(step, "step", STEP_FUNCTIONS)
 
     dt = end_time / n_steps
-    states = np.zeros((n_steps + 1,) + initial_state.shape)
+    states = gs.zeros((n_steps + 1,) + initial_state.shape)
     states[0] = initial_state
 
     step_function = globals()[STEP_FUNCTIONS[step]]
